@@ -220,15 +220,42 @@ loop1
 	LDR R0, =Index1
 	MOV R1, #0
 	STR R1, [R0]
+	BL SystTick_Init
 	
-
       POP {R0-R4,PC}
+	  BX LR
+	  
 ;Debug capture      
 Debug_Capture 
       PUSH {R0-R6,LR}
 ; you write this
 
+	MOV R2, # 			;CMP NUBER
+	LDR R0, =Index1
+	LDR R0, [R0]		;DATA POINTED TO BY INDEX
+	CMP R0, 
+	B donezo			;WHAT KIND OF BRANCH???
+	LDR R0, =GPIO_PORTA_DATA_R
+	LDR R0, [R0]
+	LDR R1, =GPIO_PORTE_DATA_R
+	LDRB R1, [R1]					;ONLY DATA FOR PE3-0
+	LDR R2, =NVIC_ST_CURRENT_R
+	LDR R2, [R2]
+	AND R0, R0, #0x10				;CLEAR ALL BUT PA4
+	ADD R3, R0, R1					;PA4, PE3-0 IN SAME REGISTER (R3)
+	LDR R4, =Index1
+	MOV R6, #0						;WHAT DOES THIS DO? PROVIDE OFFSET??
+loopy	
+	STR R3, [R0, R6]
+	ADD R2, #1
+	B loopy							;DO I NEED COMPARE ABOVE THIS TO SEE IF END OF ARRAY??
+	
+	
+	
+donezo
+
       POP  {R0-R6,PC}
+	  BX LR
       
 ; edit the following only if you need to move pins from PA4, PE3-0      
 ; logic analyzer on the real board
