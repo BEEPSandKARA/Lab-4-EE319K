@@ -46,11 +46,12 @@ GPIO_PORTF_DEN_R   EQU 0x4002551C
           AREA    DATA, ALIGN=2
 Index     SPACE 4 ; index into Stepper table 0,1,2,3
 Direction SPACE 4 ; -1 for CCW, 0 for stop 1 for CW
-DataBuffer SPACE 100
-TimeBuffer SPACE 400
-Index1 SPACE 4
 
 ;place your debug variables in RAM here
+DataBuffer SPACE 100
+TimeBuffer SPACE 400
+DataPt	SPACE 4
+TimePt	SPACE 4
 
 ; ROM Area
         IMPORT TExaS_Init
@@ -67,39 +68,7 @@ Start
       LDR  R0,=SendDataToLogicAnalyzer
       ORR  R0,R0,#1
       BL   TExaS_Init ; logic analyzer, 80 MHz
-
  ;place your initializations here
-;TURN ON CLOCK FOR PORTE AND PORTA
-	  LDR R0, =SYSCTL_RCGCGPIO_R
-	  LDRB R1, [R0]
-	  ORR R1, #0x10				;INITIALIZE PORT E
-	  ORR R1, #0x01				;INITIALIZE PORTA
-	  STRB R1, [R0]
-;WAIT FOR CLOCK
-	  NOP
-	  NOP
-;DEFINE INPUTS/OUTPUTS FOR PORT E
-	  LDR R0, =GPIO_PORTE_DIR_R
-	  LDRB R1, [R0]
-	  ORR R1, #0x0F 			;PE3-0 OUTPUTS
-	  STRB R1, [R0]
-;DEFINE INPUTS/OUTPUTS FOR PORT A
-	  LDR R0, =GPIO_PORTA_DIR_R
-	  LDRB R1, [R0]
-	  BIC R1, #0x10				;PA4 INPUT
-	  STRB R1, [R0]
-;ENABLE PORT E
-	  LDR R0, =GPIO_PORTE_DEN_R
-	  LDR R1, [R0]
-	  ORR R1, #0x0F
-	  STRB R1, [R0]
-;ENABLE PORT A
-	  LDR R0, =GPIO_PORTA_DEN_R
-	  LDR R1, [R0]
-	  ORR R1, #0x10
-	  STRB R1, [R0]
-
-
       BL   Stepper_Init ; initialize stepper motor
       BL   Switch_Init  ; initialize switch input
 ;**********************
@@ -108,7 +77,7 @@ Start
       CPSIE  I    ; TExaS logic analyzer runs on interrupts
       MOV  R5,#0  ; last PA4
 loop  
-	  BL Debug_Init 					;CALL TO DEBUG INIT
+
       LDR  R1,=GPIO_PORTA_DATA_R
       LDR  R4,[R1]  ;current value of switch
       AND  R4,R4,#0x10 ; select just bit 4
@@ -204,58 +173,97 @@ Wait
 Debug_Init 
       PUSH {R0-R4,LR}
 ; you write this
+		MOV R2, #0
+		LDR R0, =DataBuffer
+		LDR R1, =TimeBuffer
+		MOV R3, #-1
+LOOPY
+		STRB R3, [R0]
+		STR R3, [R1]
+		ADD R0, #1
+		ADD R1, #4
+		ADD R2, #1
+		CMP R2, #100
+		BLO LOOPY
+		
+		
+		
+; INITIALIZE DataPt
+		LDR R0, =DataBuffer
+		LDR R1, =DataPt
+		STR R0, [R1]
+; INITIALIZE TimePT	
+		LDR R0, =TimeBuffer
+		LDR R1, =TimePt
+		STR R0, [R1]
+		
+; ACTIVATE SYSTICK
+		BL SysTick_Init
+		
+; INITIALIZE THE INDEX
+		LDR R0, =Index
+		MOV R1, #0
+		STR R1, [R0]
 
-	MOV R2, #0
-	LDR R0, =DataBuffer
-	LDR R1, =TimeBuffer
-	MOV R3, #-1
-loop1 
-	STRB R3, [R0]
-	STR R3, [R1]
-	ADD R0, #1
-	ADD R1, #4
-	ADD R2, #1
-	CMP R2, #100
-	BLO loop1
-	LDR R0, =Index1
-	MOV R1, #0
-	STR R1, [R0]
-	BL SystTick_Init
-	
       POP {R0-R4,PC}
-	  BX LR
+	  
+	  
 	  
 ;Debug capture      
 Debug_Capture 
       PUSH {R0-R6,LR}
 ; you write this
+		MOV R4, #0 ; INITIALIZED R4 FOR LATER USE
+		
+		
+		LDR R0, =Index
+		LDR R0, [R0]
+		CMP R0, #100
+		BEQ RETURN ; RETURN BECAUSE THE ARRAY IS FULL
+		
+		; R0 ONLY CARES ABOUT PIN A4
+		LDR R0, =GPIO_PORTA_DATA_R
+		LDR R0, [R0]
+		AND R0, #0x10
+		
+		LDR R1, =GPIO_PORTE_DATA_R
+		LDR R1, [R1]
+		AND R1, #0x0F
+		
+		ADD R5, R0, R1; R5 HAS THE DATA NEEDED TO BE PUT IN DATA_BUFFER
+		
+		LDR R0, =Index
+		LDR R0, [R0]	; R0 HAS THE INDEX
+						; DONT MESS WITH R0
+		
+		LDR R1, =DataPt
+		LDR R1, [R1]	; R1 HAS THE DATA POINTER
+		
+; STORE LEAST SIGNIFICANT BYTE OF R5 TO MEMORY LOC OF DataPt + Index
+		STRB R5, [R1, R0]
+		
+;CALCULATE 24 BIT ELAPSED TIME FROM SYSTICK
+		LDR R1, =NVIC_ST_CURRENT_R
+		LDR R1, [R1] ; CURRENT TIME
+		SUB R6, R1, R4 ; R4 = PREVIOUS CAPTURE (TIME)
+						; R6 HAS THE ELAPSED TIME
+		MOV R4, R1 ; CURRENT TIME BECOMES PREVIOUS CAPTURE
 
-	MOV R2, # 			;CMP NUBER
-	LDR R0, =Index1
-	LDR R0, [R0]		;DATA POINTED TO BY INDEX
-	CMP R0, 
-	B donezo			;WHAT KIND OF BRANCH???
-	LDR R0, =GPIO_PORTA_DATA_R
-	LDR R0, [R0]
-	LDR R1, =GPIO_PORTE_DATA_R
-	LDRB R1, [R1]					;ONLY DATA FOR PE3-0
-	LDR R2, =NVIC_ST_CURRENT_R
-	LDR R2, [R2]
-	AND R0, R0, #0x10				;CLEAR ALL BUT PA4
-	ADD R3, R0, R1					;PA4, PE3-0 IN SAME REGISTER (R3)
-	LDR R4, =Index1
-	MOV R6, #0						;WHAT DOES THIS DO? PROVIDE OFFSET??
-loopy	
-	STR R3, [R0, R6]
-	ADD R2, #1
-	B loopy							;DO I NEED COMPARE ABOVE THIS TO SEE IF END OF ARRAY??
-	
-	
-	
-donezo
+; STORE R6 TO TIME_BUFFER
+		LDR R1, =TimePt
+		LDR R1, [R1]
+		
+		STR R6, [R1, R0, LSL #2]
+; SAVE R6 TO MEMORY LOC OF TimePt + Index*4
+		
 
+;UPDATE INDEX
+		ADD R0, #1
+		LDR R1, =Index
+		STR R0, [R1]
+		
+RETURN	
       POP  {R0-R6,PC}
-	  BX LR
       
 ; edit the following only if you need to move pins from PA4, PE3-0      
 ; logic analyzer on the real board
