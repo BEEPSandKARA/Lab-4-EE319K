@@ -1,7 +1,7 @@
 ;****************** main.s ***************
-; Program written by: Kara Olson and BP Rimal
+; Program written by: **-UUU-*Your Names**update this***
 ; Date Created: 2/14/2017
-; Last Modified: 3/2/2020
+; Last Modified: 1/17/2020
 ; You are given a simple stepper motor software system with one input and
 ; four outputs. This program runs, but you are asked to add minimally intrusive
 ; debugging instruments to verify it is running properly. 
@@ -47,12 +47,16 @@ GPIO_PORTF_DEN_R   EQU 0x4002551C
 Index     SPACE 4 ; index into Stepper table 0,1,2,3
 Direction SPACE 4 ; -1 for CCW, 0 for stop 1 for CW
 
+
 ;place your debug variables in RAM here
 DataBuffer SPACE 100
 TimeBuffer SPACE 400
 DataPt	SPACE 4
 TimePt	SPACE 4
+index	SPACE 4
+last_time	SPACE 4
 count EQU 10000000
+
 
 ; ROM Area
         IMPORT TExaS_Init
@@ -69,8 +73,10 @@ Start
       LDR  R0,=SendDataToLogicAnalyzer
       ORR  R0,R0,#1
       BL   TExaS_Init ; logic analyzer, 80 MHz
+	  
  ;place your initializations here
  
+ ;Initialize Port F
 ;TURN ON CLOCK FOR PORTF (FOR LED)
 	  LDR R0, =SYSCTL_RCGCGPIO_R
 	  LDRB R1, [R0]
@@ -89,8 +95,8 @@ Start
 	  LDR R1, [R0]
 	  ORR R1, #0x02
 	  STRB R1, [R0]
- 
- 
+	  
+	  
       BL   Stepper_Init ; initialize stepper motor
       BL   Switch_Init  ; initialize switch input
 ;**********************
@@ -167,6 +173,10 @@ Switch_Init
       ORR R0, R0, #0x10    ; enable PA4
       STR R0, [R1]
       BX  LR
+	  
+
+
+
 ; Step the motor clockwise
 ; Direction determines the rotational direction
 ; Input: None
@@ -235,14 +245,14 @@ LOOPY
 Debug_Capture 
       PUSH {R0-R6,LR}
 ; you write this
-		BL HeartBeat
-		MOV R4, #0 ; INITIALIZED R4 FOR LATER USE
 		
 		
-		LDR R0, =Index
-		LDR R0, [R0]
-		CMP R0, #100
+		LDR R0, =index
+		LDR R3, [R0]
+		CMP R3, #100; R3 HAS THE INDEX
 		BEQ RETURN ; RETURN BECAUSE THE ARRAY IS FULL
+		
+		BL HeartBeat
 		
 		; R0 ONLY CARES ABOUT PIN A4
 		LDR R0, =GPIO_PORTA_DATA_R
@@ -255,39 +265,54 @@ Debug_Capture
 		
 		ADD R5, R0, R1; R5 HAS THE DATA NEEDED TO BE PUT IN DATA_BUFFER
 		
-		LDR R0, =Index
-		LDR R0, [R0]	; R0 HAS THE INDEX
-						; DONT MESS WITH R0
+						; R3 HAS THE INDEX
+						; DONT MESS WITH R3
 		
 		LDR R1, =DataPt
 		LDR R1, [R1]	; R1 HAS THE DATA POINTER
 		
 ; STORE LEAST SIGNIFICANT BYTE OF R5 TO MEMORY LOC OF DataPt + Index
-		STRB R5, [R1, R0]
+		STRB R5, [R1, R3]
 		
 ;CALCULATE 24 BIT ELAPSED TIME FROM SYSTICK
 		LDR R1, =NVIC_ST_CURRENT_R
 		LDR R1, [R1] ; CURRENT TIME
-		SUB R6, R1, R4 ; R4 = PREVIOUS CAPTURE (TIME)
+		
+		LDR R4, =last_time
+		LDR R5, [R4]
+		SUB R6, R5, R1 ; R5 = PREVIOUS CAPTURE (TIME)
 						; R6 HAS THE ELAPSED TIME
-		MOV R4, R1 ; CURRENT TIME BECOMES PREVIOUS CAPTURE
+		AND R6, #0x00FFFFFF
+		STR R1, [R4] ; CURRENT TIME BECOMES PREVIOUS CAPTURE
 
 ; STORE R6 TO TIME_BUFFER
 		LDR R1, =TimePt
 		LDR R1, [R1]
 		
-		STR R6, [R1, R0, LSL #2]
+		STR R6, [R1, R3, LSL #2]
 ; SAVE R6 TO MEMORY LOC OF TimePt + Index*4
 		
 
 ;UPDATE INDEX
-		ADD R0, #1
-		LDR R1, =Index
-		STR R0, [R1]
+		ADD R3, #1
+		LDR R1, =index
+		STR R3, [R1]
 		
 RETURN	
       POP  {R0-R6,PC}
       
+	  
+; heartbeat;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+	  
+HeartBeat
+	PUSH {R0-R2, LR}
+	LDR R0, =GPIO_PORTF_DATA_R
+	LDRB R1, [R0]
+	EOR R1, #0x02
+	STRB R1, [R0] 
+	POP {R0-R2, PC}
+	  
+	  
 ; edit the following only if you need to move pins from PA4, PE3-0      
 ; logic analyzer on the real board
 PA4  equ  0x40004040   ; bit-specific addressing
@@ -305,31 +330,6 @@ SendDataToLogicAnalyzer
      BX   LR
 
 
-HeartBeat
-	PUSH {R0-R2, LR}
-	LDR R0, =GPIO_PORTF_DATA_R
-	LDR R1, [R0]
-heartloop
-	ORR R1, #0x02	;SET PE5 HIIGH
-	STR R1, [R0] 	
-	BL Delay
-	BIC R1, #0x02
-	STR R1, [R0]
-	BL Delay
-	
-	;B heartloop
-	POP {R0-R2, PC}
-	
-Delay
-	PUSH {R0, LR}
-	LDR R0, =count
-Dloop
-	SUBS R0, #1
-	BNE Dloop
-	POP {R0, PC}
-
      ALIGN    ; make sure the end of this section is aligned
      END      ; end of file
 
-
-	
