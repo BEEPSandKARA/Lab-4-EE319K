@@ -1,7 +1,7 @@
 ;****************** main.s ***************
-; Program written by: **-UUU-*Your Names**update this***
+; Program written by: Kara Olson and BP Rimal
 ; Date Created: 2/14/2017
-; Last Modified: 1/17/2020
+; Last Modified: 3/2/2020
 ; You are given a simple stepper motor software system with one input and
 ; four outputs. This program runs, but you are asked to add minimally intrusive
 ; debugging instruments to verify it is running properly. 
@@ -52,6 +52,7 @@ DataBuffer SPACE 100
 TimeBuffer SPACE 400
 DataPt	SPACE 4
 TimePt	SPACE 4
+count EQU 10000000
 
 ; ROM Area
         IMPORT TExaS_Init
@@ -69,6 +70,27 @@ Start
       ORR  R0,R0,#1
       BL   TExaS_Init ; logic analyzer, 80 MHz
  ;place your initializations here
+ 
+;TURN ON CLOCK FOR PORTF (FOR LED)
+	  LDR R0, =SYSCTL_RCGCGPIO_R
+	  LDRB R1, [R0]
+	  ORR R1, #0x20				;INITIALIZE PORT F
+	  STRB R1, [R0]
+;WAIT FOR CLOCK
+	  NOP
+	  NOP
+;DEFINE OUTPUT FOR PORT F (LED)
+	  LDR R0, =GPIO_PORTF_DIR_R
+	  LDRB R1, [R0]
+	  ORR R1, #0x02				;PF2 LED OUTPUT
+	  STRB R1, [R0]
+;ENABLE PORT F
+	  LDR R0, =GPIO_PORTF_DEN_R
+	  LDR R1, [R0]
+	  ORR R1, #0x02
+	  STRB R1, [R0]
+ 
+ 
       BL   Stepper_Init ; initialize stepper motor
       BL   Switch_Init  ; initialize switch input
 ;**********************
@@ -213,6 +235,7 @@ LOOPY
 Debug_Capture 
       PUSH {R0-R6,LR}
 ; you write this
+		BL HeartBeat
 		MOV R4, #0 ; INITIALIZED R4 FOR LATER USE
 		
 		
@@ -282,6 +305,31 @@ SendDataToLogicAnalyzer
      BX   LR
 
 
+HeartBeat
+	PUSH {R0-R2, LR}
+	LDR R0, =GPIO_PORTF_DATA_R
+	LDR R1, [R0]
+heartloop
+	ORR R1, #0x02	;SET PE5 HIIGH
+	STR R1, [R0] 	
+	BL Delay
+	BIC R1, #0x02
+	STR R1, [R0]
+	BL Delay
+	
+	;B heartloop
+	POP {R0-R2, PC}
+	
+Delay
+	PUSH {R0, LR}
+	LDR R0, =count
+Dloop
+	SUBS R0, #1
+	BNE Dloop
+	POP {R0, PC}
+
      ALIGN    ; make sure the end of this section is aligned
      END      ; end of file
 
+
+	
